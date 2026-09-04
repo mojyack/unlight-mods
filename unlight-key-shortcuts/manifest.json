@@ -1,0 +1,32 @@
+{
+    "manifest_version": 2,
+    "name": "Unlight Revive Key Shortcuts",
+    "version": "1.0",
+    "description": "Play UNLIGHT:Revive battles with the keyboard only",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "unlight-key-shortcuts@local"
+        }
+    },
+    "permissions": [
+        "storage"
+    ],
+    "browser_action": {
+        "default_popup": "popup.html",
+        "default_title": "Unlight Key Shortcuts"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://www.playunlight-dmm.com/*",
+                "*://osapi.dmm.com/*",
+                "*://play.games.dmm.com/*"
+            ],
+            "all_frames": true,
+            "run_at": "document_start",
+            "js": [
+                "cs.js"
+            ]
+        }
+    ]
+}
