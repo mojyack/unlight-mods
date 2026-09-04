@@ -15,23 +15,29 @@ var api = (typeof browser !== 'undefined') ? browser : chrome;
 
 var injected = false;
 
-function inject(initial) {
+function inject(initial, initialCap) {
     if(injected) {
         return;
     }
     injected = true;
 
-    var code = '(' + function(INIT) {
+    var code = '(' + function(INIT, CAP) {
         if(window.__UNL_HOOK_INSTALLED) {
             if(typeof INIT === 'number' && INIT > 0) window.__UNL_SPEED = INIT;
+            if(typeof CAP === 'number' && CAP >= 0) window.__UNL_FPS_CAP = CAP;
             return;
         }
         window.__UNL_HOOK_INSTALLED = true;
         window.__UNL_SPEED          = (typeof INIT === 'number' && INIT > 0) ? INIT : 2;
         window.__UNL_TIMER_MAX      = 5000; // leave long (network/session) timers untouched
+        window.__UNL_FPS_CAP        = (typeof CAP === 'number' && CAP >= 0) ? CAP : 30; // 0 = uncapped
         window.setUnlightSpeed      = function(x) {
             window.__UNL_SPEED = Number(x) || 1;
             return window.__UNL_SPEED;
+        };
+        window.setUnlightFpsCap = function(x) {
+            window.__UNL_FPS_CAP = Math.max(0, Number(x) || 0);
+            return window.__UNL_FPS_CAP;
         };
 
         // (2) frame rate: shorten short setTimeout/setInterval delays.
@@ -61,6 +67,24 @@ function inject(initial) {
             var orig           = g.loop.callback;
             g.loop.callback    = function(time, delta) { var m = window.__UNL_SPEED || 1; g.loop.delta = delta * m; return orig(time, delta * m); };
             g.loop.__unlHooked = true;
+            return true;
+        }
+
+        var rafDelay0 = null;
+        function applyCap() {
+            var g = window.game;
+            if(!g || !g.loop || !g.loop.raf) {
+                return false;
+            }
+            var raf = g.loop.raf;
+            if(rafDelay0 === null) {
+                rafDelay0 = raf.delay;
+            }
+            var cap = window.__UNL_FPS_CAP || 0;
+            var want = (cap > 0) ? Math.round(1000 / cap * (window.__UNL_SPEED || 1)) : rafDelay0;
+            if(raf.delay !== want) {
+                raf.delay = want;
+            }
             return true;
         }
 
@@ -113,7 +137,9 @@ function inject(initial) {
             }, 300);
             _st.call(window, function() { clearInterval(iv); }, 120000);
         }
-    } + ')(' + JSON.stringify(initial) + ');';
+
+        _si.call(window, applyCap, 500);
+    } + ')(' + JSON.stringify(initial) + ', ' + JSON.stringify(initialCap) + ');';
 
     var s         = document.createElement('script');
     s.textContent = code;
@@ -121,30 +147,51 @@ function inject(initial) {
     s.remove();
 }
 
-// Push a multiplier into the page (robust across content-script/page worlds).
-function apply(v) {
+// Push a setting into the page (robust across content-script/page worlds).
+function poke(js) {
     try {
         var sc         = document.createElement('script');
-        sc.textContent = 'window.__UNL_SPEED=' + (Number(v) || 1) + ';';
+        sc.textContent = js;
         (document.head || document.documentElement).appendChild(sc);
         sc.remove();
     } catch(e) {
     }
 }
 
-inject(2);
+function apply(v) {
+    poke('window.__UNL_SPEED=' + (Number(v) || 1) + ';');
+}
+
+function applyCap(v) {
+    poke('window.__UNL_FPS_CAP=' + Math.max(0, Number(v) || 0) + ';');
+}
+
+inject(2, 30);
 try {
-    var p = api.storage.local.get('speed');
+    var p = api.storage.local.get([ 'speed', 'fpsCap' ]);
+    var got = function(r) {
+        if(!r) {
+            return;
+        }
+        if(typeof r.speed === 'number') apply(r.speed);
+        if(typeof r.fpsCap === 'number') applyCap(r.fpsCap);
+    };
     if(p && p.then) {
-        p.then(function(r) { if (r && typeof r.speed === 'number') apply(r.speed); }, function() {});
+        p.then(got, function() {});
     } else {
-        api.storage.local.get('speed', function(r) { if (r && typeof r.speed === 'number') apply(r.speed); });
+        api.storage.local.get([ 'speed', 'fpsCap' ], got);
     }
 } catch(e) {
 }
 api.storage.onChanged.addListener(function(changes, area) {
-    if(area === 'local' && changes.speed) {
+    if(area !== 'local') {
+        return;
+    }
+    if(changes.speed) {
         apply(changes.speed.newValue);
+    }
+    if(changes.fpsCap) {
+        applyCap(changes.fpsCap.newValue);
     }
 });
 })();
