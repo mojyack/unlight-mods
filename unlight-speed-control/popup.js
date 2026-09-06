@@ -6,7 +6,7 @@ var els  = {};
 var fpsRow  = document.getElementById('fps');
 var fpsHint = document.getElementById('fpshint');
 var fpsEls  = {};
-var CAPS    = [ 24, 30, 60, 0 ];
+var CAPS    = [ -1, 24, 30, 60, 0 ];
 
 [1, 2, 3, 4, 5].forEach(function(v) {
     var b         = document.createElement('button');
@@ -18,7 +18,7 @@ var CAPS    = [ 24, 30, 60, 0 ];
 
 CAPS.forEach(function(v) {
     var b         = document.createElement('button');
-    b.textContent = v ? String(v) : 'off';
+    b.textContent = (v < 0) ? 'auto' : (v ? String(v) : 'off');
     b.addEventListener('click', function() { setCap(v); });
     fpsRow.appendChild(b);
     fpsEls[v] = b;
@@ -35,9 +35,11 @@ function renderCap(v) {
     CAPS.forEach(function(k) {
         fpsEls[k].className = (k === v) ? 'sel' : '';
     });
-    // Uncapped means the loop runs at 60*speed, which can swamp a slow GPU and
-    // cut the frame rate that actually reaches the screen.
-    fpsHint.textContent = v ? ('Loop pinned to ' + v + ' fps') : 'Uncapped (60 × speed)';
+    // Delta- and tween-based animation is unaffected by this; only frame-counted animation
+    // (a few menu transitions) follows the render rate.
+    fpsHint.textContent = (v < 0)  ? 'Follows what the screen keeps up with'
+                        : v        ? ('Loop pinned to ' + v + ' fps')
+                                   : 'Uncapped (60 × speed)';
 }
 
 function setSpeed(v) {
@@ -58,7 +60,7 @@ function setCap(v) {
 
 function init(r) {
     render((r && typeof r.speed === 'number') ? r.speed : 2);
-    renderCap((r && typeof r.fpsCap === 'number') ? r.fpsCap : 30);
+    renderCap((r && typeof r.fpsCap === 'number') ? r.fpsCap : -1);
 }
 
 try {
